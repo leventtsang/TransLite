@@ -1,0 +1,83 @@
+{
+  "name": "translite",
+  "version": "0.1.0",
+  "private": true,
+  "description": "面向普通用户的跨平台视频压缩工具",
+  "main": "dist-electron/electron/main.js",
+  "author": "TransLite",
+  "license": "MIT",
+  "scripts": {
+    "dev": "npm run build:electron && concurrently -k \"vite --host 127.0.0.1\" \"wait-on http://127.0.0.1:5173 && cross-env VITE_DEV_SERVER_URL=http://127.0.0.1:5173 electron .\"",
+    "prebuild:electron": "node scripts/clean-electron.mjs",
+    "build:electron": "tsc -p tsconfig.electron.json",
+    "build:renderer": "vite build",
+    "build": "npm run check:binaries && npm run typecheck && npm run build:electron && npm run build:renderer",
+    "typecheck": "tsc --noEmit && tsc -p tsconfig.electron.json --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "check:binaries": "node scripts/check-ffmpeg.mjs",
+    "pack:win": "npm run build && electron-builder --win portable --x64",
+    "pack:mac": "npm run build && electron-builder --mac zip --arm64"
+  },
+  "dependencies": {
+    "@vitejs/plugin-react": "^4.4.1",
+    "react": "^19.1.0",
+    "react-dom": "^19.1.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.15.0",
+    "@types/react": "^19.1.2",
+    "@types/react-dom": "^19.1.2",
+    "concurrently": "^9.1.2",
+    "cross-env": "^7.0.3",
+    "electron": "^35.2.1",
+    "electron-builder": "^26.0.12",
+    "typescript": "^5.8.3",
+    "vite": "^6.3.3",
+    "vitest": "^3.1.2",
+    "wait-on": "^8.0.3"
+  },
+  "build": {
+    "appId": "com.translite.app",
+    "productName": "TransLite",
+    "asar": true,
+    "files": [
+      "dist/**/*",
+      "dist-electron/**/*",
+      "package.json"
+    ],
+    "extraResources": [
+      {
+        "from": "THIRD_PARTY_NOTICES.md",
+        "to": "THIRD_PARTY_NOTICES.md"
+      }
+    ],
+    "directories": {
+      "output": "release"
+    },
+    "win": {
+      "target": "portable",
+      "artifactName": "TransLite-${version}-Windows-x64.${ext}",
+      "extraResources": [
+        {
+          "from": "resources/ffmpeg/win32-x64",
+          "to": "ffmpeg/win32-x64",
+          "filter": ["ffmpeg.exe", "ffprobe.exe"]
+        }
+      ]
+    },
+    "mac": {
+      "target": "zip",
+      "category": "public.app-category.video",
+      "identity": null,
+      "artifactName": "TransLite-${version}-macOS-arm64.${ext}",
+      "extraResources": [
+        {
+          "from": "resources/ffmpeg/darwin-arm64",
+          "to": "ffmpeg/darwin-arm64",
+          "filter": ["ffmpeg", "ffprobe"]
+        }
+      ]
+    }
+  }
+}

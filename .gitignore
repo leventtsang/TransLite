@@ -1,0 +1,12 @@
+node_modules/
+dist/
+dist-electron/
+release/
+*.log
+.DS_Store
+resources/ffmpeg/win32-x64/*.exe
+resources/ffmpeg/darwin-arm64/ffmpeg
+resources/ffmpeg/darwin-arm64/ffprobe
+resources/ffmpeg/darwin-arm64/ffplay
+.tmp_*/
+outputs/
