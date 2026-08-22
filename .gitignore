@@ -2,6 +2,7 @@ node_modules/
 dist/
 dist-electron/
 release/
+release-bluray/
 *.log
 .DS_Store
 resources/ffmpeg/win32-x64/*.exe
