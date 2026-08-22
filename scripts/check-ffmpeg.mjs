@@ -10,8 +10,6 @@ if (process.env.SKIP_FFMPEG_CHECK === '1') {
 const files = [
   ['resources/ffmpeg/win32-x64/ffmpeg.exe', false],
   ['resources/ffmpeg/win32-x64/ffprobe.exe', false],
-  ['resources/ffmpeg/darwin-arm64/ffmpeg', true],
-  ['resources/ffmpeg/darwin-arm64/ffprobe', true],
 ];
 
 const missing = [];

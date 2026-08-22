@@ -1,10 +1,10 @@
 /// <reference types="vite/client" />
 
-import type { TransLiteApi } from './shared/types';
+import type { BlurayApi } from './shared/blurayTypes';
 
 declare global {
   interface Window {
-    translite: TransLiteApi;
+    bluray: BlurayApi;
   }
 }
 

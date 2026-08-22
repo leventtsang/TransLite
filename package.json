@@ -1,8 +1,8 @@
 {
   "name": "translite",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": true,
-  "description": "面向普通用户的跨平台视频压缩工具",
+  "description": "Windows 蓝光原盘收藏级 HDR 转码工具",
   "main": "dist-electron/electron/main.js",
   "author": "TransLite",
   "license": "MIT",
@@ -17,7 +17,7 @@
     "test:watch": "vitest",
     "check:binaries": "node scripts/check-ffmpeg.mjs",
     "pack:win": "npm run build && electron-builder --win portable --x64",
-    "pack:mac": "npm run build && electron-builder --mac zip --arm64"
+    "pack:mac": "node -e \"throw new Error('蓝光版仅支持 Windows x64')\""
   },
   "dependencies": {
     "@vitejs/plugin-react": "^4.4.1",
@@ -38,8 +38,8 @@
     "wait-on": "^8.0.3"
   },
   "build": {
-    "appId": "com.translite.app",
-    "productName": "TransLite",
+    "appId": "com.translite.bluray",
+    "productName": "TransLite Blu-ray",
     "asar": true,
     "files": [
       "dist/**/*",
@@ -57,7 +57,7 @@
     },
     "win": {
       "target": "portable",
-      "artifactName": "TransLite-${version}-Windows-x64.${ext}",
+      "artifactName": "TransLite-BluRay-${version}-Windows-x64.${ext}",
       "extraResources": [
         {
           "from": "resources/ffmpeg/win32-x64",
