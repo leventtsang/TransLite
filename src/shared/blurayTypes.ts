@@ -66,6 +66,7 @@ export interface BlurayTitle {
   audioTracks: BlurayAudioTrack[];
   subtitleTracks: BluraySubtitleTrack[];
   duplicateOf?: string;
+  suspiciousLoop?: boolean;
   warnings: string[];
 }
 

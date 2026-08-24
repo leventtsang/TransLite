@@ -3,7 +3,7 @@ import { access, readFile, readdir, stat } from 'node:fs/promises';
 import { constants } from 'node:fs';
 import { basename, dirname, join } from 'node:path';
 import { spawn } from 'node:child_process';
-import { parseMpls } from '../src/shared/mpls';
+import { parseMpls, ticksBetween } from '../src/shared/mpls';
 import { recommendBluraySettings } from '../src/shared/blurayRecommendations';
 import type {
   BlurayAnalysis, BlurayAudioTrack, BlurayRecommendation, BluraySubtitleTrack, BlurayTitle, BlurayVideoTrack,
@@ -42,15 +42,19 @@ export async function analyzeBdmv(selectedPath: string): Promise<BlurayAnalysis>
   const playlistNames = (await readdir(playlistDirectory)).filter((name) => /\.mpls$/i.test(name)).sort();
   if (playlistNames.length === 0) throw new Error('PLAYLIST 文件夹中没有 MPLS 播放列表。');
   const rawTitles: BlurayTitle[] = [];
+  const sizeCache = new Map<string, number>();
   for (const playlistName of playlistNames) {
     try {
       const parsed = parseMpls(await readFile(join(playlistDirectory, playlistName)));
       if (parsed.clips.length === 0 || parsed.durationSeconds < 5) continue;
-      const clips = await Promise.all(parsed.clips.map(async (clip) => {
-        const path = join(streamDirectory, `${clip.id}.m2ts`);
-        const file = await stat(path);
-        return { ...clip, path, durationSeconds: (clip.outTicks - clip.inTicks) / 45_000, sizeBytes: file.size };
+      const uniquePaths = [...new Set(parsed.clips.map((clip) => join(streamDirectory, `${clip.id}.m2ts`)))];
+      await Promise.all(uniquePaths.map(async (path) => {
+        if (!sizeCache.has(path)) sizeCache.set(path, (await stat(path)).size);
       }));
+      const clips = parsed.clips.map((clip) => {
+        const path = join(streamDirectory, `${clip.id}.m2ts`);
+        return { ...clip, path, durationSeconds: ticksBetween(clip.inTicks, clip.outTicks) / 45_000, sizeBytes: sizeCache.get(path) ?? 0 };
+      });
       // concat demuxer exposes the stream layout of its first segment, so use that
       // same segment when deciding which absolute stream indexes to map.
       const probeClip = clips[0];
@@ -61,10 +65,12 @@ export async function analyzeBdmv(selectedPath: string): Promise<BlurayAnalysis>
       const warnings: string[] = [];
       if (video.hdrType === 'dolby-vision') warnings.push('Dolby Vision Profile 7 增强层无法在常规重编码中可靠保留，建议输出 HDR10 基础层。');
       if (parsed.angleCount > 1) warnings.push(`检测到 ${parsed.angleCount} 个角度，当前按主角度处理。`);
+      if (parsed.suspiciousLoop) warnings.push(`播放列表包含异常循环或重复片段（单项最多重复 ${parsed.maxPlayItemRepeats} 次），已禁止用于转码。`);
       rawTitles.push({
         id: playlistName.replace(/\.mpls$/i, ''), playlistName, durationSeconds: parsed.durationSeconds,
         sizeBytes: clips.reduce((sum, clip) => sum + clip.sizeBytes, 0), clips,
-        chaptersSeconds: parsed.chaptersSeconds, angleCount: parsed.angleCount, video, audioTracks, subtitleTracks, warnings,
+        chaptersSeconds: parsed.chaptersSeconds, angleCount: parsed.angleCount, video, audioTracks, subtitleTracks,
+        suspiciousLoop: parsed.suspiciousLoop, warnings,
       });
     } catch { /* 菜单或损坏的播放列表不阻止整盘分析 */ }
   }
@@ -76,8 +82,10 @@ export async function analyzeBdmv(selectedPath: string): Promise<BlurayAnalysis>
     if (duplicate) title.duplicateOf = duplicate;
     else seen.set(signature, title.id);
   }
-  const titles = rawTitles.sort((a, b) => b.durationSeconds - a.durationSeconds || b.sizeBytes - a.sizeBytes);
-  const recommended = titles.find((title) => !title.duplicateOf) ?? titles[0];
+  const titles = rawTitles.sort((a, b) => Number(a.suspiciousLoop) - Number(b.suspiciousLoop)
+    || b.durationSeconds - a.durationSeconds || b.sizeBytes - a.sizeBytes);
+  const recommended = titles.find((title) => !title.duplicateOf && !title.suspiciousLoop);
+  if (!recommended) throw new Error('只找到循环或异常播放列表，没有可安全转码的主标题。');
   const discRoot = basename(root).toUpperCase() === 'BDMV' ? dirname(root) : root;
   const warnings = playlistNames.length > 200 ? ['播放列表数量很多，可能包含防复制混淆；已按片段顺序去重并优先推荐最长标题。'] : [];
   return { rootPath: discRoot, discName: basename(discRoot), titles, recommendedTitleId: recommended.id, playlistCount: playlistNames.length, warnings };

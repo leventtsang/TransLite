@@ -35,7 +35,9 @@ function assertPath(value: unknown): asserts value is string {
 function assertJob(title: unknown, settings: unknown): asserts title is BlurayTitle {
   if (!title || typeof title !== 'object' || !settings || typeof settings !== 'object') throw new Error('转码任务无效');
   const t = title as Partial<BlurayTitle>; const s = settings as Partial<BlurayTranscodeSettings>;
-  if (!Array.isArray(t.clips) || !t.clips.length || !t.video || !Array.isArray(s.audioStreamIndexes)
+  if (!Array.isArray(t.clips) || !t.clips.length || !t.video || t.suspiciousLoop
+    || typeof t.durationSeconds !== 'number' || !Number.isFinite(t.durationSeconds) || t.durationSeconds <= 0 || t.durationSeconds > 86_400
+    || !Array.isArray(s.audioStreamIndexes)
     || !Array.isArray(s.subtitleStreamIndexes) || !Array.isArray(s.externalSubtitles)
     || !['hevc', 'copy'].includes(s.videoCodec ?? '') || typeof s.outputPath !== 'string' || extname(s.outputPath).toLowerCase() !== '.mkv') {
     throw new Error('转码参数无效');

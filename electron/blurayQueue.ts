@@ -4,6 +4,7 @@ import { mkdtemp, rename, rm, writeFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { buildBlurayFfmpegArgs } from '../src/shared/blurayArgs';
+import { ticksBetween } from '../src/shared/mpls';
 import type { BlurayProgress, BlurayTitle, BlurayTranscodeSettings } from '../src/shared/blurayTypes';
 import { binaryPath } from './bluray';
 
@@ -17,6 +18,9 @@ export class BlurayQueue {
 
   async start(title: BlurayTitle, settings: BlurayTranscodeSettings): Promise<void> {
     if (this.child) throw new Error('已有蓝光任务正在转码。');
+    if (title.suspiciousLoop || !Number.isFinite(title.durationSeconds) || title.durationSeconds <= 0 || title.durationSeconds > 86_400) {
+      throw new Error('该播放列表被识别为循环或异常时长，不能开始转码。请选择正常标题。');
+    }
     this.cancelled = false;
     const work = await mkdtemp(join(tmpdir(), 'translite-bd-'));
     const partial = join(dirname(settings.outputPath), `.${Date.now()}-${app.getName()}-partial.mkv`);
@@ -25,7 +29,7 @@ export class BlurayQueue {
     await writeFile(concatPath, title.clips.flatMap((clip) => [
       `file '${escapeConcat(clip.path)}'`,
       `inpoint ${(clip.inTicks / 45_000).toFixed(6)}`,
-      `outpoint ${(clip.outTicks / 45_000).toFixed(6)}`,
+      `outpoint ${((clip.inTicks + ticksBetween(clip.inTicks, clip.outTicks)) / 45_000).toFixed(6)}`,
     ]).join('\n'), 'utf8');
     if (chaptersPath) await writeFile(chaptersPath, chapters(title), 'utf8');
     const args = buildBlurayFfmpegArgs(title, settings, { concatPath, chaptersPath, temporaryOutputPath: partial });
@@ -68,7 +72,7 @@ export class BlurayQueue {
     return new Promise((resolve, reject) => {
       const child = spawn(binaryPath('ffmpeg'), args, { shell: false, windowsHide: true });
       this.child = child;
-      let progressBuffer = ''; let stderr = ''; let speedAverage: number | undefined;
+      let progressBuffer = ''; let stderr = ''; let speedAverage: number | undefined; let stableSamples = 0;
       child.stdout.setEncoding('utf8'); child.stderr.setEncoding('utf8');
       child.stdout.on('data', (chunk: string) => {
         progressBuffer += chunk;
@@ -80,10 +84,14 @@ export class BlurayQueue {
           if (key === 'out_time_ms' && seconds === undefined) seconds = Number(value) / 1_000_000;
           if (key === 'speed') speed = Number(value.replace('x', ''));
         }
-        if (speed && Number.isFinite(speed)) speedAverage = speedAverage === undefined ? speed : speedAverage * 0.75 + speed * 0.25;
+        if (speed && Number.isFinite(speed) && speed >= 0.001 && speed <= 100) {
+          speedAverage = speedAverage === undefined ? speed : speedAverage * 0.75 + speed * 0.25;
+          stableSamples += 1;
+        }
         if (seconds !== undefined) {
           const progress = Math.min(0.999, Math.max(0, seconds / title.durationSeconds));
-          const etaSeconds = speedAverage ? Math.max(0, (title.durationSeconds - seconds) / speedAverage) : undefined;
+          const etaSeconds = speedAverage && stableSamples >= 5 && seconds >= 30
+            ? Math.max(0, (title.durationSeconds - seconds) / speedAverage) : undefined;
           this.emit({ status: 'running', progress, speed: speedAverage, etaSeconds, stage: '正在进行收藏级转码' });
         }
       });
